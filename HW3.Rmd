@@ -1,0 +1,87 @@
+---
+title: "HW3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+***********************************************************************************
+```{r}
+library(tidyverse)
+library(glmnet)
+library(knitr)
+library(Lahman)
+library(dplyr)
+```
+
+```{r}
+load('market_level.R') # market-level data is datam
+load('market_airline_level.R') # market airline level data
+```
+
+Set the seed to 0 and randomly allocate 1,000 rows of the market-level data to a test
+set, to be used only in (7). Use the rest to do the following.
+
+```{r}
+set.seed(0)
+test_rows<- sample(nrow(datam),1000) #randomly choose 1000 rows in mkt-level data
+test<- datam[test_rows,] # this test set contains 1000 rows chosen above
+df <- datam[-test_rows,] # this df set contains the rest rows
+
+```
+
+```{r}
+AA<- #find out which market does American Airline enter
+  datama %>%
+  filter(ticket_carrier=="AA") %>%
+  select(-price:-market_income)
+
+df_AA<-left_join(df,AA, by=c("origin_airport_id"="origin_airport_id",
+                             "dest_airport_id"="dest_airport_id"))
+
+df_AA$AA=1*(df_AA$ticket_carrier=="AA") #create an indicator which equals to 1 if AA is in this mkt
+df_AA<-select(df_AA,-ticket_carrier)
+df_AA[is.na(df_AA)]<-0 #fill N/A with 0
+
+```
+
+
+Estimate a linear probability model, predicting whether American Airlines enters a
+market as a function of the number of competitors.
+```{r}
+
+df_AA %>% 
+  apply(1, function(x){
+  if(x[AA] == 1){
+    x[num_of_comp]= x[num_carriers] - 1
+  } else {
+    x[num_of_comp]= x[num_carriers]
+  }
+})
+
+#lm(AA~num_carriers)
+
+```
