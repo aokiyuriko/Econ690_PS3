@@ -92,7 +92,7 @@ summary(logit_m)
 ```
 
 ```{r}
-logit_m <- glm(AA ~ comp,family=binomial(link='probit'),data=df_AA)
+probit_m <- glm(AA ~ comp,family=binomial(link='probit'),data=df_AA)
 summary(logit_m)
 ```
 
@@ -119,8 +119,21 @@ for(i in uni){
 ```
 
 ```{r}
-plot(train$comp, train$AA)
-abline(linear_m)
-train$logit_p = predict(logit_m, newdata=train, type="response")
-lines(logit_m$model, train, col="green4", lwd=1)
+predicted.data <- as.data.frame(predict(logit_m, newdata = train, 
+                                        type="link", se=TRUE))
+new.data <- cbind(train, predicted.data)
+new.data$fit <- logit_m$family$linkinv(new.data$fit)
+predicted.data <- as.data.frame(predict(probit_m, newdata = train, 
+                                        type="link", se=TRUE))
+new.data1 <- cbind(train, predicted.data)
+new.data1$fit <- probit_m$family$linkinv(new.data$fit)
+predicted.data <- as.data.frame(predict(linear_m, newdata = train, 
+                                        type="response", se=TRUE))
+p <- ggplot(train, aes(comp, AA))
+predicted.data <- as.data.frame(predict(linear_m, newdata = train, 
+                                        type="response", se=TRUE))
+new.data2 <- cbind(train, predicted.data)
+p + geom_point() + geom_line(data=new.data, aes(y=fit)) + geom_line(data=new.data1, aes(y=fit)) + geom_line(data = new.data2, aes(y = fit, x= comp))
 ```
+
+
