@@ -35,6 +35,9 @@ library(glmnet)
 library(knitr)
 library(Lahman)
 library(dplyr)
+library(class)
+library(DMwR)
+library(ggplot2)
 ```
 
 ```{r}
@@ -65,23 +68,59 @@ df_AA<-left_join(df,AA, by=c("origin_airport_id"="origin_airport_id",
 df_AA$AA=1*(df_AA$ticket_carrier=="AA") #create an indicator which equals to 1 if AA is in this mkt
 df_AA<-select(df_AA,-ticket_carrier)
 df_AA[is.na(df_AA)]<-0 #fill N/A with 0
-
+colnames(df_AA)
+test_AA<-left_join(test,AA, by=c("origin_airport_id"="origin_airport_id",
+                             "dest_airport_id"="dest_airport_id"))
+test_AA$AA = 1*(test_AA$ticket_carrier=="AA")
+test_AA[is.na(test_AA)]<-0
 ```
 
 
 Estimate a linear probability model, predicting whether American Airlines enters a
 market as a function of the number of competitors.
 ```{r}
+df_AA <- df_AA %>% mutate(comp = num_carriers - AA)
+test_AA <- test_AA %>% mutate(comp = num_carriers - AA)
 
-df_AA %>% 
-  apply(1, function(x){
-  if(x[AA] == 1){
-    x[num_of_comp]= x[num_carriers] - 1
-  } else {
-    x[num_of_comp]= x[num_carriers]
-  }
-})
+linear_m <- lm(AA~comp, df_AA)
+summary(linear_m)
+```
 
-#lm(AA~num_carriers)
+```{r}
+logit_m <- glm(AA ~ comp,family=binomial(link='logit'),data=df_AA)
+summary(logit_m)
+```
 
+```{r}
+logit_m <- glm(AA ~ comp,family=binomial(link='probit'),data=df_AA)
+summary(logit_m)
+```
+
+```{r}
+train <- df_AA %>% select(AA, comp)
+# train$AA <- factor(train$AA)
+# test_sample <- test_AA %>% select(AA, comp)
+# test_sample$AA <- factor(test_sample$AA)
+# target <- train%>%select(AA)
+# x <- as.vector(t(target))
+# x <- factor(x)
+# knn_m <- knn(train=train, test=test_sample, cl=x, k=1)
+# table(knn_m)
+```
+
+```{r}
+uni <- sort(unique(train$comp))
+for(i in uni){
+ temp = train %>% filter(comp == i)
+ cat("The conditional probability of entering condition on ", i, " is: ")
+ cat(sum(temp$AA)/nrow(temp), "\n")
+}
+
+```
+
+```{r}
+plot(train$comp, train$AA)
+abline(linear_m)
+train$logit_p = predict(logit_m, newdata=train, type="response")
+lines(logit_m$model, train, col="green4", lwd=1)
 ```
