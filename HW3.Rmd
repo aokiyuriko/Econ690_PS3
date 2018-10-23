@@ -1,5 +1,7 @@
 ---
-title: "HW3"
+title: "ML_PS3"
+author: "Xuefeng Xu"
+date: "October 23, 2018"
 output: html_document
 ---
 
@@ -7,29 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-
-
-***********************************************************************************
-```{r}
+```{r results='hide'}
 library(tidyverse)
 library(glmnet)
 library(knitr)
@@ -38,6 +18,7 @@ library(dplyr)
 library(class)
 library(DMwR)
 library(ggplot2)
+library(rmarkdown)
 ```
 
 ```{r}
@@ -45,95 +26,110 @@ load('market_level.R') # market-level data is datam
 load('market_airline_level.R') # market airline level data
 ```
 
-Set the seed to 0 and randomly allocate 1,000 rows of the market-level data to a test
-set, to be used only in (7). Use the rest to do the following.
+# 0
+
+Set the seed to 0 and randomly allocate 1,000 rows of the market-level data to a test set, to be used only in (7). Use the rest to do the following.
 
 ```{r}
 set.seed(0)
 test_rows<- sample(nrow(datam),1000) #randomly choose 1000 rows in mkt-level data
-test<- datam[test_rows,] # this test set contains 1000 rows chosen above
-df <- datam[-test_rows,] # this df set contains the rest rows
+test <- datam[test_rows,] # this test set contains 1000 rows chosen above
+train <- datam[-test_rows,] # this df set contains the rest rows
 
 ```
 
+# 1
+
+Estimate a linear probability model, predicting whether American Airlines enters a market as a function of the number of competitors. Note: American Airlines’ ticket carrier id is “AA”.
+
+
 ```{r}
-AA<- #find out which market does American Airline enter
+AA <- #find out which market does American Airline enter
   datama %>%
   filter(ticket_carrier=="AA") %>%
   select(-price:-market_income)
 
-df_AA<-left_join(df,AA, by=c("origin_airport_id"="origin_airport_id",
+train_AA <- left_join(train,AA, by=c("origin_airport_id"="origin_airport_id",
                              "dest_airport_id"="dest_airport_id"))
 
-df_AA$AA=1*(df_AA$ticket_carrier=="AA") #create an indicator which equals to 1 if AA is in this mkt
-df_AA<-select(df_AA,-ticket_carrier)
-df_AA[is.na(df_AA)]<-0 #fill N/A with 0
-colnames(df_AA)
+train_AA$AA <- 1*(train_AA$ticket_carrier=="AA") #create an indicator which equals to 1 if AA is in this mkt
+train_AA <- select(train_AA,-ticket_carrier)
+train_AA[is.na(train_AA)] <- 0 #fill N/A with 0
+colnames(train_AA)
 test_AA<-left_join(test,AA, by=c("origin_airport_id"="origin_airport_id",
                              "dest_airport_id"="dest_airport_id"))
 test_AA$AA = 1*(test_AA$ticket_carrier=="AA")
-test_AA[is.na(test_AA)]<-0
+test_AA[is.na(test_AA)] <- 0
+colnames(test_AA)
 ```
 
-
-Estimate a linear probability model, predicting whether American Airlines enters a
-market as a function of the number of competitors.
 ```{r}
-df_AA <- df_AA %>% mutate(comp = num_carriers - AA)
+train_AA <- train_AA %>% mutate(comp = num_carriers - AA)
 test_AA <- test_AA %>% mutate(comp = num_carriers - AA)
 
-linear_m <- lm(AA~comp, df_AA)
+linear_m <- lm(AA~comp, train_AA)
 summary(linear_m)
 ```
 
+# 2
+
+Repeat (1) using a logit model instead of a linear probability model.
+
 ```{r}
-logit_m <- glm(AA ~ comp,family=binomial(link='logit'),data=df_AA)
+logit_m <- glm(AA ~ comp,family=binomial(link='logit'),data=train_AA)
 summary(logit_m)
 ```
 
+# 3
+
+Repeat (1) using a probit model instead of a linear probability model.
+
 ```{r}
-probit_m <- glm(AA ~ comp,family=binomial(link='probit'),data=df_AA)
+probit_m <- glm(AA ~ comp,family=binomial(link='probit'),data=train_AA)
 summary(logit_m)
 ```
 
-```{r}
-train <- df_AA %>% select(AA, comp)
-# train$AA <- factor(train$AA)
-# test_sample <- test_AA %>% select(AA, comp)
-# test_sample$AA <- factor(test_sample$AA)
-# target <- train%>%select(AA)
-# x <- as.vector(t(target))
-# x <- factor(x)
-# knn_m <- knn(train=train, test=test_sample, cl=x, k=1)
-# table(knn_m)
-```
+# 4
+
+Compute non-parametric estimates of the conditional probabilities of entering. (ie compute the conditional probability of entering conditional on each number of competitors directly from the data).
 
 ```{r}
-uni <- sort(unique(train$comp))
+uni <- sort(unique(train_AA$comp))
 for(i in uni){
- temp = train %>% filter(comp == i)
+ temp = train_AA %>% filter(comp == i)
  cat("The conditional probability of entering condition on ", i, " is: ")
  cat(sum(temp$AA)/nrow(temp), "\n")
 }
 
 ```
 
+# 5 
+
+Plot the ﬁtted values of each regression in one graph (i.e. estimated probabilities on the y-axis and the number of competitors on the x-axis). In words, explain the coeﬃcients of the ﬁrst three models. How do the estimated relationships compare? Should we interpret these relationships causally? Are the estimates for the probit and logit similar? Should we have expected this ex ante?
+
 ```{r}
-predicted.data <- as.data.frame(predict(logit_m, newdata = train, 
+predicted.data <- as.data.frame(predict(logit_m, newdata = train_AA, 
                                         type="link", se=TRUE))
-new.data <- cbind(train, predicted.data)
+new.data <- cbind(train_AA, predicted.data)
 new.data$fit <- logit_m$family$linkinv(new.data$fit)
-predicted.data <- as.data.frame(predict(probit_m, newdata = train, 
+predicted.data <- as.data.frame(predict(probit_m, newdata = train_AA, 
                                         type="link", se=TRUE))
-new.data1 <- cbind(train, predicted.data)
+new.data1 <- cbind(train_AA, predicted.data)
 new.data1$fit <- probit_m$family$linkinv(new.data$fit)
-predicted.data <- as.data.frame(predict(linear_m, newdata = train, 
+predicted.data <- as.data.frame(predict(linear_m, newdata = train_AA, 
                                         type="response", se=TRUE))
-p <- ggplot(train, aes(comp, AA))
-predicted.data <- as.data.frame(predict(linear_m, newdata = train, 
+p <- ggplot(train_AA, aes(comp, AA))
+predicted.data <- as.data.frame(predict(linear_m, newdata = train_AA, 
                                         type="response", se=TRUE))
-new.data2 <- cbind(train, predicted.data)
-p + geom_point() + geom_line(data=new.data, aes(y=fit)) + geom_line(data=new.data1, aes(y=fit)) + geom_line(data = new.data2, aes(y = fit, x= comp))
+new.data2 <- cbind(train_AA, predicted.data)
+p + geom_point() + geom_line(data=new.data, aes(y=fit)) + geom_line(data=new.data1, aes(y=fit)) + geom_line(data = new.data2, aes(y = fit, x= comp)) + ylim(0,1)
 ```
 
+# 6 
+
+Obviously other covariates matter in predicting whether or not American will enter a particular route. In addition to the number of competitors, add the average market distance, market size, hub route indicator, vacation route indicator, slot controlled indicator, and market income to the set of predictors. Fit to the data L1 regularized logistic regression (ie Lasso for logit, pg 125-126 ESL) where the full model includes all squared terms and second-order cross terms. Using a 10-fold cross validation procedure, ﬁnd the optimal value of lambda.
+
+# 7 
+
+Calculate the sum of squared prediction errors on the test set for each of your 5 models and put them in a table. Explain your results.
 
