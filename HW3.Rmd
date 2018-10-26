@@ -15,8 +15,7 @@ library(glmnet)
 library(knitr)
 library(Lahman)
 library(dplyr)
-install.packages("kableExtra")
-devtools::install_github("haozhu233/kableExtra")
+
 ```
 
 ```{r}
@@ -55,21 +54,22 @@ Estimate a linear probability model, predicting whether American Airlines enters
 market as a function of the number of competitors.
 ```{r}
 
-df_AA<- mutate(df_AA,comp=num_carriers-AA)
+df_AA<- mutate(df_AA,comp=num_carriers-AA) #create the new variable'numbers of competition'
 
 linear_m<-lm(AA~comp,df_AA)
 summary(linear_m)
-summary(linear_m)$coefficients[2,1]
 
 ```
 
 ```{r}
+#probit model
 probit_m<- glm(formula=AA~comp,family = binomial(link='probit'),data = df_AA)
 summary(probit_m)
 
 ```
 
 ```{r}
+#logit model
 logit_m<- glm(formula=AA~comp,family = binomial(link='logit'),data = df_AA)
 summary(logit_m)
 ```
@@ -89,6 +89,7 @@ for (i in num_comp) {
   non_par<- rbind(non_par,c(i,prob))
 }
  colnames(non_par) <- c('comp', 'prob of AA entering')
+ non_par <- as.data.frame(non_par)
  kable(non_par)
 ```
 
@@ -96,11 +97,19 @@ for (i in num_comp) {
 on the y-axis and the number of competitors on the x-axis).
 
 ```{r}
+df_AA<- left_join(df_AA,non_par, by=c('comp'='comp'))
+colnames(df_AA)[colnames(df_AA)=="prob of AA entering"] <- "non_par_estimate"
+df_AA[is.na(df_AA)]<-0
+
+
 pred_lm<-predict(linear_m, type='response')
 pred_logit<-predict(logit_m, type='response')
 pred_probit<-predict(probit_m, type='response')
 
-ggplot(data=df_AA,aes(x=comp,y=AA))+geom_point()+
+
+ggplot(data=df_AA,aes(comp,AA))+
+  geom_line(data=df_AA, aes(x=comp, y=non_par_estimate),col = 'green',linetype = 'dashed') +
+  #set the non-parametric model to a green dashed line
   geom_line(model=lm, data=df_AA, aes(x=comp, y=pred_lm),col='black')+ 
   # set the linear model to black line
   geom_line(model=glm, data=df_AA, aes(x=comp, y=pred_logit),col='blue')+
@@ -109,7 +118,7 @@ ggplot(data=df_AA,aes(x=comp,y=AA))+geom_point()+
   #set the probit model to red line
   xlab('number of competitors')+ylab('entering')
 
-#another way to plot: first create a data frame containing predicted outcome for four models, then plot this data frame. use gather funtion.
+#a better way to plot: first create a data frame containing predicted outcomes for four models, then plot this data frame, which provides a legend for four models. use gather funtion.
 ```
 
 In words, explain the coeffi-cients of the first three models. How do the estimated relationships compare? Should we interpret these relationships causally? Are the estimates for the probit and logit similar? Should we have expected this ex ante?
@@ -148,8 +157,6 @@ test$AA=1*(test$ticket_carrier=="AA")
 test$comp = test$num_carriers-test$AA
 test<-select(test,-ticket_carrier,-origin_city:-population_dest)
 
-
-non_par <- as.data.frame(non_par)
 test<-left_join(test,non_par, by=c('comp'='comp'))
 test[is.na(test)]<-0 #fill N/A with 0
 ```
