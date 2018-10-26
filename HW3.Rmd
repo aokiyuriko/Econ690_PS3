@@ -1,24 +1,22 @@
 ---
-title: "ML_PS3"
-author: "Xuefeng Xu"
-date: "October 23, 2018"
+title: "HW3"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r}
+rm(list = ls())
+
 ```
 
-```{r results='hide'}
+***********************************************************************************
+```{r}
 library(tidyverse)
 library(glmnet)
 library(knitr)
 library(Lahman)
 library(dplyr)
-library(class)
-library(DMwR)
-library(ggplot2)
-library(rmarkdown)
+install.packages("kableExtra")
+devtools::install_github("haozhu233/kableExtra")
 ```
 
 ```{r}
@@ -26,110 +24,170 @@ load('market_level.R') # market-level data is datam
 load('market_airline_level.R') # market airline level data
 ```
 
-# 0
-
-Set the seed to 0 and randomly allocate 1,000 rows of the market-level data to a test set, to be used only in (7). Use the rest to do the following.
+Set the seed to 0 and randomly allocate 1,000 rows of the market-level data to a test
+set, to be used only in (7). Use the rest to do the following.
 
 ```{r}
 set.seed(0)
 test_rows<- sample(nrow(datam),1000) #randomly choose 1000 rows in mkt-level data
-test <- datam[test_rows,] # this test set contains 1000 rows chosen above
-train <- datam[-test_rows,] # this df set contains the rest rows
+test<- datam[test_rows,] # this test set contains 1000 rows chosen above
+df <- datam[-test_rows,] # this df set contains the rest rows
 
 ```
 
-# 1
-
-Estimate a linear probability model, predicting whether American Airlines enters a market as a function of the number of competitors. Note: American Airlines’ ticket carrier id is “AA”.
-
-
 ```{r}
-AA <- #find out which market does American Airline enter
+AA<- #find out which market does American Airline enter
   datama %>%
   filter(ticket_carrier=="AA") %>%
   select(-price:-market_income)
 
-train_AA <- left_join(train,AA, by=c("origin_airport_id"="origin_airport_id",
+df_AA<-left_join(df,AA, by=c("origin_airport_id"="origin_airport_id",
                              "dest_airport_id"="dest_airport_id"))
 
-train_AA$AA <- 1*(train_AA$ticket_carrier=="AA") #create an indicator which equals to 1 if AA is in this mkt
-train_AA <- select(train_AA,-ticket_carrier)
-train_AA[is.na(train_AA)] <- 0 #fill N/A with 0
-colnames(train_AA)
-test_AA<-left_join(test,AA, by=c("origin_airport_id"="origin_airport_id",
-                             "dest_airport_id"="dest_airport_id"))
-test_AA$AA = 1*(test_AA$ticket_carrier=="AA")
-test_AA[is.na(test_AA)] <- 0
-colnames(test_AA)
+df_AA$AA=1*(df_AA$ticket_carrier=="AA") #create an indicator which equals to 1 if AA is in this mkt
+df_AA<-select(df_AA,-ticket_carrier,-origin_city:-population_dest)  #drop columns we don't need
+df_AA[is.na(df_AA)]<-0 #fill N/A with 0
+
 ```
 
-```{r}
-train_AA <- train_AA %>% mutate(comp = num_carriers - AA)
-test_AA <- test_AA %>% mutate(comp = num_carriers - AA)
 
-linear_m <- lm(AA~comp, train_AA)
+Estimate a linear probability model, predicting whether American Airlines enters a
+market as a function of the number of competitors.
+```{r}
+
+df_AA<- mutate(df_AA,comp=num_carriers-AA)
+
+linear_m<-lm(AA~comp,df_AA)
 summary(linear_m)
+summary(linear_m)$coefficients[2,1]
+
 ```
 
-# 2
+```{r}
+probit_m<- glm(formula=AA~comp,family = binomial(link='probit'),data = df_AA)
+summary(probit_m)
 
-Repeat (1) using a logit model instead of a linear probability model.
+```
 
 ```{r}
-logit_m <- glm(AA ~ comp,family=binomial(link='logit'),data=train_AA)
+logit_m<- glm(formula=AA~comp,family = binomial(link='logit'),data = df_AA)
 summary(logit_m)
 ```
 
-# 3
-
-Repeat (1) using a probit model instead of a linear probability model.
-
-```{r}
-probit_m <- glm(AA ~ comp,family=binomial(link='probit'),data=train_AA)
-summary(logit_m)
-```
-
-# 4
-
-Compute non-parametric estimates of the conditional probabilities of entering. (ie compute the conditional probability of entering conditional on each number of competitors directly from the data).
+4) Compute non-parametric estimates of the conditional probabilities of entering. (ie
+compute the conditional probability of entering conditional on each number of competitors
+directly from the data).
 
 ```{r}
-uni <- sort(unique(train_AA$comp))
-for(i in uni){
- temp = train_AA %>% filter(comp == i)
- cat("The conditional probability of entering condition on ", i, " is: ")
- cat(sum(temp$AA)/nrow(temp), "\n")
+num_comp <- sort(unique(df_AA$comp))
+non_par<- c()
+for (i in num_comp) {
+  temp <- filter (df_AA, comp==i)
+  prob <- sum(temp$AA==1) /nrow(temp)
+  cat('\nThe conditional probability of entntering conditional on ', i,'competitors is :', 
+      prob)
+  non_par<- rbind(non_par,c(i,prob))
 }
-
+ colnames(non_par) <- c('comp', 'prob of AA entering')
+ kable(non_par)
 ```
 
-# 5 
-
-Plot the ﬁtted values of each regression in one graph (i.e. estimated probabilities on the y-axis and the number of competitors on the x-axis). In words, explain the coeﬃcients of the ﬁrst three models. How do the estimated relationships compare? Should we interpret these relationships causally? Are the estimates for the probit and logit similar? Should we have expected this ex ante?
+5)Plot the fitted values of each regression in one graph (i.e. estimated probabilities
+on the y-axis and the number of competitors on the x-axis).
 
 ```{r}
-predicted.data <- as.data.frame(predict(logit_m, newdata = train_AA, 
-                                        type="link", se=TRUE))
-new.data <- cbind(train_AA, predicted.data)
-new.data$fit <- logit_m$family$linkinv(new.data$fit)
-predicted.data <- as.data.frame(predict(probit_m, newdata = train_AA, 
-                                        type="link", se=TRUE))
-new.data1 <- cbind(train_AA, predicted.data)
-new.data1$fit <- probit_m$family$linkinv(new.data$fit)
-predicted.data <- as.data.frame(predict(linear_m, newdata = train_AA, 
-                                        type="response", se=TRUE))
-p <- ggplot(train_AA, aes(comp, AA))
-predicted.data <- as.data.frame(predict(linear_m, newdata = train_AA, 
-                                        type="response", se=TRUE))
-new.data2 <- cbind(train_AA, predicted.data)
-p + geom_point() + geom_line(data=new.data, aes(y=fit)) + geom_line(data=new.data1, aes(y=fit)) + geom_line(data = new.data2, aes(y = fit, x= comp)) + ylim(0,1)
+pred_lm<-predict(linear_m, type='response')
+pred_logit<-predict(logit_m, type='response')
+pred_probit<-predict(probit_m, type='response')
+
+ggplot(data=df_AA,aes(x=comp,y=AA))+geom_point()+
+  geom_line(model=lm, data=df_AA, aes(x=comp, y=pred_lm),col='black')+ 
+  # set the linear model to black line
+  geom_line(model=glm, data=df_AA, aes(x=comp, y=pred_logit),col='blue')+
+  #set the logit model to blue line
+  geom_line(model=glm,data=df_AA, aes(x=comp, y=pred_probit),col='red')+
+  #set the probit model to red line
+  xlab('number of competitors')+ylab('entering')
+
+#another way to plot: first create a data frame containing predicted outcome for four models, then plot this data frame. use gather funtion.
 ```
 
-# 6 
+In words, explain the coeffi-cients of the first three models. How do the estimated relationships compare? Should we interpret these relationships causally? Are the estimates for the probit and logit similar? Should we have expected this ex ante?
+```{r}
+coefficients<-c(summary(linear_m)$coefficient[2,1],summary(logit_m)$coefficients[2,1],
+                summary(probit_m)$coefficients[2,1])
+model<-c('linear','logit','probit')
+names(coefficients) <-c(model)
+coefficients
 
-Obviously other covariates matter in predicting whether or not American will enter a particular route. In addition to the number of competitors, add the average market distance, market size, hub route indicator, vacation route indicator, slot controlled indicator, and market income to the set of predictors. Fit to the data L1 regularized logistic regression (ie Lasso for logit, pg 125-126 ESL) where the full model includes all squared terms and second-order cross terms. Using a 10-fold cross validation procedure, ﬁnd the optimal value of lambda.
+```
 
-# 7 
 
-Calculate the sum of squared prediction errors on the test set for each of your 5 models and put them in a table. Explain your results.
+6  
+```{r}
+  
+mod<-lm(formula=(AA~((comp+ average_distance_m + market_size+ hub_route+ vacation_route+
+                      slot_controlled+market_income)^2 + comp^2 + average_distance_m^2+
+                       market_size^2 + hub_route^2 + vacation_route^2 + slot_controlled^2-
+                       hub_route:slot_controlled)),  x=TRUE ,data = df_AA) 
 
+X<- mod$x[,-1]
+y<- mod$model$AA
+
+regular_log<-cv.glmnet(X,y,family='binomial',alpha=1,nfold=10) #create a regularized logistic regression model, using 10 fold
+
+lamda_min<-regular_log$lambda.min #find the optimal lambda
+print(lamda_min)
+```
+
+7
+```{r}
+test<-left_join(test,AA, by=c("origin_airport_id"="origin_airport_id",
+                             "dest_airport_id"="dest_airport_id")) 
+test$AA=1*(test$ticket_carrier=="AA")
+test$comp = test$num_carriers-test$AA
+test<-select(test,-ticket_carrier,-origin_city:-population_dest)
+
+
+non_par <- as.data.frame(non_par)
+test<-left_join(test,non_par, by=c('comp'='comp'))
+test[is.na(test)]<-0 #fill N/A with 0
+```
+
+```{r}
+SPE<- function(yhat,y){ #SPE = sum of squared prediction errors
+  resd=yhat-y
+  SPE=sum(resd^2)/1000
+  return(SPE)}
+
+```
+
+```{r}
+pre1<-predict(linear_m, newdata = test)
+SPE_linear<-SPE(pre1,test$AA)
+
+pre2<-predict(logit_m, newdata = test)
+SPE_log<-SPE(pre2,test$AA)
+
+pre3<-predict(probit_m, newdata = test)
+SPE_pro<-SPE(pre3,test$AA)
+
+mod2<-lm(formula=(AA~((comp+ average_distance_m + market_size+ hub_route+ vacation_route+
+                      slot_controlled+market_income)^2 + comp^2 + average_distance_m^2+
+                       market_size^2 + hub_route^2 + vacation_route^2 + slot_controlled^2-
+                       hub_route:slot_controlled)),  x=TRUE ,data = test) 
+
+
+pre4<-predict(regular_log, newx=mod2$x[,-1])
+SPE_regular_log <- SPE(pre4,test$AA)
+
+SPE_non_par <- SPE(test$`prob of AA entering`, test$AA)
+
+SPE_table<- matrix(c(SPE_linear,SPE_log,SPE_pro,SPE_regular_log, SPE_non_par),nrow=5,
+                   byrow = FALSE)
+rownames(SPE_table)<- c('linear model', 'logit model', 'probit model','regularized logit model',
+                     'non-parametric model')
+colnames(SPE_table) <- c('prediction errors')
+kable(SPE_table)
+
+```
